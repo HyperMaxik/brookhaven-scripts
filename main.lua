@@ -1,19 +1,35 @@
 --[[
-    ╔═══════════════════════════════════════════════╗
-    ║          ECLIPSE HUB  |  Brookhaven RP         ║
-    ║          Made for Delta X Executor             ║
-    ║          Version: 1.0.0                        ║
-    ╚═══════════════════════════════════════════════╝
-
-    Features:
-      • Custom draggable UI with blur + rounded corners
-      • Tabs: Player, Teleport, Visuals, Fun, Settings
-      • Fly, Noclip, Speed, Jump, Inf Jump
-      • Teleport to players / saved locations
-      • Fullbright, ESP, Tracers
-      • BTools, Sit on anyone, Grab tools
-      • Keybind to toggle UI (RightShift)
+    ECLIPSE HUB | Brookhaven RP
+    Made for Delta X Executor
+    Version: 1.1.0
 ]]
+
+--==================================================--
+--  CONSOLE + LOGGING
+--==================================================--
+pcall(function()
+    if rconsolecreate then rconsolecreate("Eclipse Hub") end
+end)
+
+local function Log(msg)
+    print("[EclipseHub] " .. tostring(msg))
+    pcall(function() if rconsoleprint then rconsoleprint("[EclipseHub] " .. tostring(msg) .. "\n") end end)
+end
+
+local function LogErr(msg)
+    warn("[EclipseHub] [ERROR] " .. tostring(msg))
+    pcall(function() if rconsoleprint then rconsoleprint("[EclipseHub] [ERROR] " .. tostring(msg) .. "\n") end end)
+end
+
+print("====================================")
+print("   ECLIPSE HUB - Brookhaven RP v1.1")
+print("   Executor: " .. (identifyexecutor and identifyexecutor() or "unknown"))
+print("====================================")
+
+--==================================================--
+--  MAIN PCALL WRAPPER
+--==================================================--
+local ok, err = pcall(function()
 
 --==================================================--
 --  SERVICES
@@ -30,41 +46,7 @@ local StarterGui        = game:GetService("StarterGui")
 local LocalPlayer = Players.LocalPlayer
 local Camera       = Workspace.CurrentCamera
 
---==================================================--
---  LOGGING
---==================================================--
-local LOG_PREFIX = "[EclipseHub] "
-
-local function Log(msg)
-    print(LOG_PREFIX .. tostring(msg))
-    pcall(function()
-        if rconsoleprint then
-            rconsoleprint(LOG_PREFIX .. tostring(msg) .. "\n")
-        end
-    end)
-end
-
-local function LogWarn(msg)
-    warn(LOG_PREFIX .. tostring(msg))
-    pcall(function()
-        if rconsoleprint then
-            rconsoleprint(LOG_PREFIX .. "[WARN] " .. tostring(msg) .. "\n")
-        end
-    end)
-end
-
-local function LogError(msg)
-    warn(LOG_PREFIX .. "[ERROR] " .. tostring(msg))
-    pcall(function()
-        if rconsoleprint then
-            rconsoleprint(LOG_PREFIX .. "[ERROR] " .. tostring(msg) .. "\n")
-        end
-    end)
-end
-
-Log("Starting Eclipse Hub v1.0.0...")
-Log("Executor: " .. (identifyexecutor and identifyexecutor() or "unknown"))
-Log("Game ID: " .. tostring(game.PlaceId))
+Log("Services loaded")
 
 --==================================================--
 --  STATE
@@ -76,7 +58,6 @@ local Eclipse = {
         Background    = Color3.fromRGB(20, 20, 28),
         Sidebar       = Color3.fromRGB(26, 26, 36),
         Accent        = Color3.fromRGB(138, 99, 255),
-        AccentHover   = Color3.fromRGB(160, 125, 255),
         Text          = Color3.fromRGB(235, 235, 245),
         TextDark      = Color3.fromRGB(150, 150, 165),
         Element       = Color3.fromRGB(34, 34, 46),
@@ -90,15 +71,12 @@ local Eclipse = {
 --==================================================--
 --  UTILITIES
 --==================================================--
-local function Lerp(a, b, t) return a + (b - a) * t end
 local function Round(n, d) local m = 10 ^ (d or 0) return math.floor(n * m + 0.5) / m end
+
 local function Notify(title, text, duration)
-    duration = duration or 3
     pcall(function()
         StarterGui:SetCore("SendNotification", {
-            Title = title,
-            Text  = text,
-            Duration = duration,
+            Title = title, Text = text, Duration = duration or 3,
         })
     end)
 end
@@ -106,9 +84,7 @@ end
 local function Create(class, props, children)
     local obj = Instance.new(class)
     for k, v in pairs(props or {}) do
-        if k ~= "Parent" then
-            obj[k] = v
-        end
+        if k ~= "Parent" then obj[k] = v end
     end
     for _, child in ipairs(children or {}) do
         child.Parent = obj
@@ -125,9 +101,9 @@ local function MakeDraggable(frame, handle)
 
     handle.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            dragging   = true
-            dragStart  = input.Position
-            startPos   = frame.Position
+            dragging = true
+            dragStart = input.Position
+            startPos = frame.Position
             input.Changed:Connect(function()
                 if input.UserInputState == Enum.UserInputState.End then
                     dragging = false
@@ -154,32 +130,60 @@ local function MakeDraggable(frame, handle)
 end
 
 --==================================================--
+--  PARENT GUI (fallback chain)
+--==================================================--
+local parentGui
+
+-- 1) gethui() — best for executors
+if gethui then
+    pcall(function() parentGui = gethui() end)
+    Log("gethui() result: " .. tostring(parentGui and parentGui.Name or "nil"))
+end
+
+-- 2) CoreGui
+if not parentGui then
+    pcall(function() parentGui = CoreGui end)
+    Log("Using CoreGui as parent")
+end
+
+-- 3) PlayerGui fallback
+if not parentGui then
+    pcall(function() parentGui = LocalPlayer:WaitForChild("PlayerGui") end)
+    Log("Using PlayerGui as parent")
+end
+
+-- Destroy old instance
+local old = parentGui and parentGui:FindFirstChild("EclipseHub")
+if old then
+    Log("Destroying old EclipseHub instance")
+    old:Destroy()
+end
+
+Log("Creating ScreenGui...")
+
+--==================================================--
 --  UI LIBRARY
 --==================================================--
 local UI = {}
 UI.Tabs = {}
 
--- Safely parent to CoreGui
-local parentGui = CoreGui
-local holderName = "EclipseHub_" .. tostring(math.random(1000, 9999))
-local old = parentGui:FindFirstChild("EclipseHub")
-if old then old:Destroy() end
-
 local ScreenGui = Create("ScreenGui", {
     Name              = "EclipseHub",
-    Parent            = parentGui,
     ResetOnSpawn      = false,
     ZIndexBehavior    = Enum.ZIndexBehavior.Sibling,
     DisplayOrder      = 999,
+    IgnoreGuiInset    = true,
 })
+ScreenGui.Parent = parentGui
 
--- Blur background
+Log("ScreenGui parented to: " .. tostring(parentGui and parentGui.Name or "NONE"))
+
+-- Blur
 local Blur = Create("BlurEffect", {
-    Name     = "EclipseBlur",
-    Size     = 0,
-    Parent   = Lighting,
+    Name   = "EclipseBlur",
+    Size   = 0,
+    Parent = Lighting,
 })
-
 TweenService:Create(Blur, TweenInfo.new(0.4), {Size = 12}):Play()
 
 -- Main Window
@@ -190,15 +194,14 @@ local MainWindow = Create("Frame", {
     Position         = UDim2.new(0.5, 0, 0.5, 0),
     Size             = UDim2.new(0, 560, 0, 380),
     BackgroundColor3 = Eclipse.Theme.Background,
-    BackgroundTransparency = 0,
     Active           = true,
-    Draggable        = false,
 }, {
     Create("UICorner", { CornerRadius = UDim.new(0, 12) }),
-    Create("UIStroke", { Color = Eclipse.Theme.Stroke, Thickness = 1, Transparency = 0 }),
+    Create("UIStroke", { Color = Eclipse.Theme.Stroke, Thickness = 1 }),
 })
 
 MakeDraggable(MainWindow)
+Log("MainWindow created")
 
 -- Sidebar
 local Sidebar = Create("Frame", {
@@ -206,12 +209,10 @@ local Sidebar = Create("Frame", {
     Parent           = MainWindow,
     Size             = UDim2.new(0, 160, 1, 0),
     BackgroundColor3 = Eclipse.Theme.Sidebar,
-    BackgroundTransparency = 0,
 }, {
     Create("UICorner", { CornerRadius = UDim.new(0, 12) }),
 })
 
--- Cover the right rounded corners of sidebar
 Create("Frame", {
     Parent           = Sidebar,
     Size             = UDim2.new(0, 12, 1, 0),
@@ -220,8 +221,7 @@ Create("Frame", {
     BorderSizePixel  = 0,
 })
 
--- Title
-local TitleLabel = Create("TextLabel", {
+Create("TextLabel", {
     Parent           = Sidebar,
     Size             = UDim2.new(1, 0, 0, 50),
     Position         = UDim2.new(0, 0, 0, 10),
@@ -233,7 +233,7 @@ local TitleLabel = Create("TextLabel", {
     TextXAlignment   = Enum.TextXAlignment.Center,
 })
 
-local SubTitle = Create("TextLabel", {
+Create("TextLabel", {
     Parent           = Sidebar,
     Size             = UDim2.new(1, 0, 0, 16),
     Position         = UDim2.new(0, 0, 0, 38),
@@ -245,7 +245,6 @@ local SubTitle = Create("TextLabel", {
     TextXAlignment   = Enum.TextXAlignment.Center,
 })
 
--- Tab container
 local TabList = Create("Frame", {
     Name             = "TabList",
     Parent           = Sidebar,
@@ -253,13 +252,9 @@ local TabList = Create("Frame", {
     Position         = UDim2.new(0, 10, 0, 75),
     BackgroundTransparency = 1,
 }, {
-    Create("UIListLayout", {
-        Padding      = UDim.new(0, 4),
-        SortOrder    = Enum.SortOrder.LayoutOrder,
-    }),
+    Create("UIListLayout", { Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder }),
 })
 
--- Content area
 local ContentArea = Create("Frame", {
     Name             = "Content",
     Parent           = MainWindow,
@@ -268,7 +263,7 @@ local ContentArea = Create("Frame", {
     BackgroundTransparency = 1,
 })
 
--- Top bar (close / minimize)
+-- Close button
 local CloseBtn = Create("TextButton", {
     Parent           = MainWindow,
     Size             = UDim2.new(0, 24, 0, 24),
@@ -288,7 +283,6 @@ Create("ImageLabel", {
     Image            = "rbxassetid://3926305904",
     ImageRectOffset  = Vector2.new(284, 4),
     ImageRectSize    = Vector2.new(24, 24),
-    ImageColor3      = Color3.fromRGB(255, 255, 255),
 })
 
 CloseBtn.MouseButton1Click:Connect(function()
@@ -296,11 +290,10 @@ CloseBtn.MouseButton1Click:Connect(function()
     TweenService:Create(MainWindow, TweenInfo.new(0.3), {Size = UDim2.new(0, 560, 0, 0)}):Play()
     task.wait(0.3)
     ScreenGui:Destroy()
-    Blur:Destroy()
-    -- cleanup connections
-    for _, c in pairs(Eclipse.Connections) do pcall(function() c:Disconnect() end) end
+    if Blur then Blur:Destroy() end
 end)
 
+-- Minimize button
 local MinBtn = Create("TextButton", {
     Parent           = MainWindow,
     Size             = UDim2.new(0, 24, 0, 24),
@@ -320,7 +313,6 @@ Create("ImageLabel", {
     Image            = "rbxassetid://3926305904",
     ImageRectOffset  = Vector2.new(116, 204),
     ImageRectSize    = Vector2.new(24, 24),
-    ImageColor3      = Color3.fromRGB(255, 255, 255),
 })
 
 local minimized = false
@@ -343,27 +335,19 @@ end)
 --==================================================--
 local TabOrder = 0
 
-function UI:AddTab(name, icon)
+function UI:AddTab(name)
     TabOrder = TabOrder + 1
     local tab = {}
 
-    -- Tab button
     local TabBtn = Create("TextButton", {
         Parent           = TabList,
         Size             = UDim2.new(1, 0, 0, 34),
         BackgroundColor3 = Eclipse.Theme.Element,
         Text             = "",
         AutoButtonColor  = false,
-        TextColor3       = Eclipse.Theme.TextDark,
-        TextSize         = 14,
-        Font             = Enum.Font.GothamMedium,
-        TextXAlignment   = Enum.TextXAlignment.Left,
     }, {
         Create("UICorner", { CornerRadius = UDim.new(0, 8) }),
-        Create("UIPadding", {
-            PaddingLeft   = UDim.new(0, 12),
-            PaddingRight  = UDim.new(0, 8),
-        }),
+        Create("UIPadding", { PaddingLeft = UDim.new(0, 12), PaddingRight = UDim.new(0, 8) }),
     })
 
     local TabLabel = Create("TextLabel", {
@@ -378,7 +362,6 @@ function UI:AddTab(name, icon)
         TextXAlignment   = Enum.TextXAlignment.Left,
     })
 
-    -- Page
     local Page = Create("ScrollingFrame", {
         Parent           = ContentArea,
         Size             = UDim2.new(1, 0, 1, 0),
@@ -389,20 +372,13 @@ function UI:AddTab(name, icon)
         AutomaticCanvasSize = Enum.AutomaticSize.Y,
         Visible          = false,
     }, {
-        Create("UIListLayout", {
-            Padding      = UDim.new(0, 6),
-            SortOrder    = Enum.SortOrder.LayoutOrder,
-        }),
-        Create("UIPadding", {
-            PaddingTop    = UDim.new(0, 4),
-            PaddingBottom = UDim.new(0, 4),
-        }),
+        Create("UIListLayout", { Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder }),
+        Create("UIPadding", { PaddingTop = UDim.new(0, 4), PaddingBottom = UDim.new(0, 4) }),
     })
 
-    tab.Button  = TabBtn
-    tab.Page    = Page
-    tab.Label   = TabLabel
-    tab.Elements = {}
+    tab.Button = TabBtn
+    tab.Page   = Page
+    tab.Label  = TabLabel
 
     local function Select()
         for _, t in pairs(UI.Tabs) do
@@ -416,14 +392,10 @@ function UI:AddTab(name, icon)
     end
 
     TabBtn.MouseButton1Click:Connect(Select)
+    if TabOrder == 1 then Select() end
 
-    if TabOrder == 1 then
-        Select()
-    end
-
-    -- Element helpers
     function tab:AddSection(title)
-        local SecLabel = Create("TextLabel", {
+        Create("TextLabel", {
             Parent           = Page,
             Size             = UDim2.new(1, 0, 0, 20),
             BackgroundTransparency = 1,
@@ -433,7 +405,6 @@ function UI:AddTab(name, icon)
             Font             = Enum.Font.GothamBold,
             TextXAlignment   = Enum.TextXAlignment.Left,
         })
-        return SecLabel
     end
 
     function tab:AddToggle(text, default, callback)
@@ -444,12 +415,11 @@ function UI:AddTab(name, icon)
             Parent           = Page,
             Size             = UDim2.new(1, 0, 0, 38),
             BackgroundColor3 = Eclipse.Theme.Element,
-            BackgroundTransparency = 0,
         }, {
             Create("UICorner", { CornerRadius = UDim.new(0, 8) }),
         })
 
-        local ToggleLabel = Create("TextLabel", {
+        Create("TextLabel", {
             Parent           = ToggleFrame,
             Size             = UDim2.new(1, -60, 1, 0),
             Position         = UDim2.new(0, 12, 0, 0),
@@ -504,20 +474,13 @@ function UI:AddTab(name, icon)
         end)
 
         ToggleFrame.MouseEnter:Connect(function()
-            TweenService:Create(ToggleFrame, TweenInfo.new(0.15), {
-                BackgroundColor3 = Eclipse.Theme.ElementHover
-            }):Play()
+            TweenService:Create(ToggleFrame, TweenInfo.new(0.15), {BackgroundColor3 = Eclipse.Theme.ElementHover}):Play()
         end)
         ToggleFrame.MouseLeave:Connect(function()
-            TweenService:Create(ToggleFrame, TweenInfo.new(0.15), {
-                BackgroundColor3 = Eclipse.Theme.Element
-            }):Play()
+            TweenService:Create(ToggleFrame, TweenInfo.new(0.15), {BackgroundColor3 = Eclipse.Theme.Element}):Play()
         end)
 
-        return {
-            Set = function(v) state = v Update() end,
-            Get = function() return state end,
-        }
+        return { Set = function(v) state = v Update() end, Get = function() return state end }
     end
 
     function tab:AddButton(text, callback)
@@ -534,19 +497,12 @@ function UI:AddTab(name, icon)
             Create("UICorner", { CornerRadius = UDim.new(0, 8) }),
         })
 
-        Btn.MouseButton1Click:Connect(function()
-            pcall(callback)
-        end)
-
+        Btn.MouseButton1Click:Connect(function() pcall(callback) end)
         Btn.MouseEnter:Connect(function()
-            TweenService:Create(Btn, TweenInfo.new(0.15), {
-                BackgroundColor3 = Eclipse.Theme.Accent
-            }):Play()
+            TweenService:Create(Btn, TweenInfo.new(0.15), {BackgroundColor3 = Eclipse.Theme.Accent}):Play()
         end)
         Btn.MouseLeave:Connect(function()
-            TweenService:Create(Btn, TweenInfo.new(0.15), {
-                BackgroundColor3 = Eclipse.Theme.Element
-            }):Play()
+            TweenService:Create(Btn, TweenInfo.new(0.15), {BackgroundColor3 = Eclipse.Theme.Element}):Play()
         end)
     end
 
@@ -562,7 +518,7 @@ function UI:AddTab(name, icon)
             Create("UICorner", { CornerRadius = UDim.new(0, 8) }),
         })
 
-        local SliderLabel = Create("TextLabel", {
+        Create("TextLabel", {
             Parent           = SliderFrame,
             Size             = UDim2.new(1, -20, 0, 20),
             Position         = UDim2.new(0, 12, 0, 6),
@@ -640,17 +596,6 @@ function UI:AddTab(name, icon)
                 Update(input)
             end
         end)
-
-        return {
-            Set = function(v)
-                local rel = (v - min) / (max - min)
-                Eclipse.Flags[flag] = v
-                ValueLabel.Text = tostring(v)
-                Fill.Size = UDim2.new(rel, 0, 1, 0)
-                Knob.Position = UDim2.new(rel, -7, 0.5, -7)
-                pcall(callback, v)
-            end,
-        }
     end
 
     function tab:AddDropdown(text, options, callback)
@@ -677,28 +622,16 @@ function UI:AddTab(name, icon)
             TextXAlignment   = Enum.TextXAlignment.Left,
         })
 
-        local Arrow = Create("ImageLabel", {
-            Parent           = DropFrame,
-            Size             = UDim2.new(0, 16, 0, 16),
-            Position         = UDim2.new(1, -24, 0.5, -8),
-            BackgroundTransparency = 1,
-            Image            = "rbxassetid://3926305904",
-            ImageRectOffset  = Vector2.new(284, 4),
-            ImageRectSize    = Vector2.new(24, 24),
-            ImageColor3      = Eclipse.Theme.TextDark,
-        })
-
         local ListFrame = Create("Frame", {
             Parent           = DropFrame,
             Size             = UDim2.new(1, 0, 0, 0),
             Position         = UDim2.new(0, 0, 0, 40),
             BackgroundColor3 = Eclipse.Theme.Sidebar,
             Visible          = false,
+            ZIndex           = 10,
         }, {
             Create("UICorner", { CornerRadius = UDim.new(0, 8) }),
-            Create("UIListLayout", {
-                Padding = UDim.new(0, 2),
-            }),
+            Create("UIListLayout", { Padding = UDim.new(0, 2) }),
         })
 
         local open = false
@@ -733,7 +666,6 @@ function UI:AddTab(name, icon)
                     pcall(callback, opt)
                     open = false
                     ListFrame.Visible = false
-                    TweenService:Create(ListFrame, TweenInfo.new(0.15), {Size = UDim2.new(1, 0, 0, 0)}):Play()
                 end)
             end
         end
@@ -743,9 +675,7 @@ function UI:AddTab(name, icon)
             if open then
                 RefreshList()
                 ListFrame.Visible = true
-                TweenService:Create(ListFrame, TweenInfo.new(0.15), {
-                    Size = UDim2.new(1, 0, 0, #options * 30)
-                }):Play()
+                TweenService:Create(ListFrame, TweenInfo.new(0.15), {Size = UDim2.new(1, 0, 0, #options * 30)}):Play()
             else
                 TweenService:Create(ListFrame, TweenInfo.new(0.15), {Size = UDim2.new(1, 0, 0, 0)}):Play()
                 task.wait(0.15)
@@ -765,7 +695,7 @@ function UI:AddTab(name, icon)
     end
 
     function tab:AddLabel(text)
-        local Lbl = Create("TextLabel", {
+        Create("TextLabel", {
             Parent           = Page,
             Size             = UDim2.new(1, 0, 0, 24),
             BackgroundTransparency = 1,
@@ -775,23 +705,20 @@ function UI:AddTab(name, icon)
             Font             = Enum.Font.Gotham,
             TextXAlignment   = Enum.TextXAlignment.Left,
         })
-        return Lbl
     end
 
     table.insert(UI.Tabs, tab)
     return tab
 end
 
+Log("UI library ready")
+
 --==================================================--
 --  FEATURE MODULES
 --==================================================--
-
--- Character helper
 local function GetChar()
     local char = LocalPlayer.Character
-    if char and char:FindFirstChild("HumanoidRootPart") then
-        return char
-    end
+    if char and char:FindFirstChild("HumanoidRootPart") then return char end
     return nil
 end
 
@@ -805,27 +732,15 @@ local function GetHum()
     return char and char:FindFirstChildOfClass("Humanoid") or nil
 end
 
---==================================================--
---  FLY
---==================================================--
+-- FLY
 local FlyConfig = { Speed = 50, Enabled = false }
-local FlyConn
-local BV, BG
+local FlyConn, BV, BG
 
 local function StartFly()
     local root = GetRoot()
     if not root then return end
-    BV = Create("BodyVelocity", {
-        MaxForce = Vector3.new(9e9, 9e9, 9e9),
-        Velocity = Vector3.zero,
-        Parent = root,
-    })
-    BG = Create("BodyGyro", {
-        MaxForce = Vector3.new(9e9, 9e9, 9e9),
-        P = 10000,
-        CFrame = root.CFrame,
-        Parent = root,
-    })
+    BV = Create("BodyVelocity", { MaxForce = Vector3.new(9e9, 9e9, 9e9), Velocity = Vector3.zero, Parent = root })
+    BG = Create("BodyGyro", { MaxForce = Vector3.new(9e9, 9e9, 9e9), P = 10000, CFrame = root.CFrame, Parent = root })
     FlyConn = RunService.RenderStepped:Connect(function()
         local hum = GetHum()
         local r = GetRoot()
@@ -853,18 +768,14 @@ local function StopFly()
     if BG then BG:Destroy() BG = nil end
 end
 
---==================================================--
---  NOCLIP
---==================================================--
+-- NOCLIP
 local NoclipConn
 local function StartNoclip()
     NoclipConn = RunService.Stepped:Connect(function()
         local char = GetChar()
         if char then
             for _, p in ipairs(char:GetDescendants()) do
-                if p:IsA("BasePart") and p.CanCollide then
-                    p.CanCollide = false
-                end
+                if p:IsA("BasePart") and p.CanCollide then p.CanCollide = false end
             end
         end
     end)
@@ -875,16 +786,12 @@ local function StopNoclip()
     local char = GetChar()
     if char then
         for _, p in ipairs(char:GetDescendants()) do
-            if p:IsA("BasePart") then
-                p.CanCollide = true
-            end
+            if p:IsA("BasePart") then p.CanCollide = true end
         end
     end
 end
 
---==================================================--
---  INFINITE JUMP
---==================================================--
+-- INFINITE JUMP
 local InfJumpConn
 local function StartInfJump()
     InfJumpConn = UserInputService.JumpRequest:Connect(function()
@@ -897,15 +804,13 @@ local function StopInfJump()
     if InfJumpConn then InfJumpConn:Disconnect() InfJumpConn = nil end
 end
 
---==================================================--
---  ESP
---==================================================--
+-- ESP
 local ESPObjects = {}
 local ESPConn
 
 local function ClearESP()
     for _, obj in pairs(ESPObjects) do
-        if obj and obj.Destroy then pcall(function() obj:Destroy() end) end
+        pcall(function() obj:Destroy() end)
     end
     ESPObjects = {}
 end
@@ -919,47 +824,46 @@ local function CreateESPForPlayer(plr)
         if not head then return end
 
         local bb = Create("BillboardGui", {
-            Name          = "EclipseESP_" .. plr.Name,
-            Adornee       = head,
-            Size          = UDim2.new(0, 200, 0, 50),
-            StudsOffset   = Vector3.new(0, 2, 0),
-            AlwaysOnTop   = true,
+            Name = "EclipseESP_" .. plr.Name,
+            Adornee = head,
+            Size = UDim2.new(0, 200, 0, 50),
+            StudsOffset = Vector3.new(0, 2, 0),
+            AlwaysOnTop = true,
             LightInfluence = 0,
         })
 
         local frame = Create("Frame", {
-            Parent           = bb,
-            Size             = UDim2.new(1, 0, 1, 0),
+            Parent = bb,
+            Size = UDim2.new(1, 0, 1, 0),
             BackgroundTransparency = 1,
         })
 
         local nameLbl = Create("TextLabel", {
-            Parent           = frame,
-            Size             = UDim2.new(1, 0, 0, 18),
+            Parent = frame,
+            Size = UDim2.new(1, 0, 0, 18),
             BackgroundTransparency = 1,
-            Text             = plr.DisplayName,
-            TextColor3       = Eclipse.Theme.Accent,
-            TextSize         = 14,
-            Font             = Enum.Font.GothamBold,
+            Text = plr.DisplayName,
+            TextColor3 = Eclipse.Theme.Accent,
+            TextSize = 14,
+            Font = Enum.Font.GothamBold,
             TextStrokeTransparency = 0.5,
         })
 
         local distLbl = Create("TextLabel", {
-            Parent           = frame,
-            Size             = UDim2.new(1, 0, 0, 14),
-            Position         = UDim2.new(0, 0, 0, 18),
+            Parent = frame,
+            Size = UDim2.new(1, 0, 0, 14),
+            Position = UDim2.new(0, 0, 0, 18),
             BackgroundTransparency = 1,
-            Text             = "",
-            TextColor3       = Eclipse.Theme.Text,
-            TextSize         = 12,
-            Font             = Enum.Font.Gotham,
+            Text = "",
+            TextColor3 = Eclipse.Theme.Text,
+            TextSize = 12,
+            Font = Enum.Font.Gotham,
             TextStrokeTransparency = 0.5,
         })
 
-        bb.Parent = CoreGui
+        bb.Parent = parentGui
         ESPObjects[plr.UserId] = bb
 
-        -- update loop
         task.spawn(function()
             while ESPObjects[plr.UserId] do
                 local r = GetRoot()
@@ -979,9 +883,7 @@ local function CreateESPForPlayer(plr)
 end
 
 local function StartESP()
-    for _, plr in ipairs(Players:GetPlayers()) do
-        CreateESPForPlayer(plr)
-    end
+    for _, plr in ipairs(Players:GetPlayers()) do CreateESPForPlayer(plr) end
     ESPConn = Players.PlayerAdded:Connect(CreateESPForPlayer)
 end
 
@@ -990,22 +892,20 @@ local function StopESP()
     ClearESP()
 end
 
---==================================================--
---  FULLBRIGHT
---==================================================--
+-- FULLBRIGHT
 local FullbrightConn
 local origBrightness, origClock, origFogEnd, origFogStart
 
 local function StartFullbright()
     origBrightness = Lighting.Brightness
-    origClock      = Lighting.ClockTime
-    origFogEnd     = Lighting.FogEnd
-    origFogStart   = Lighting.FogStart
+    origClock = Lighting.ClockTime
+    origFogEnd = Lighting.FogEnd
+    origFogStart = Lighting.FogStart
     FullbrightConn = RunService.RenderStepped:Connect(function()
-        Lighting.Brightness  = 2
-        Lighting.ClockTime   = 14
-        Lighting.FogEnd      = 1e10
-        Lighting.FogStart    = 1e10
+        Lighting.Brightness = 2
+        Lighting.ClockTime = 14
+        Lighting.FogEnd = 1e10
+        Lighting.FogStart = 1e10
     end)
 end
 
@@ -1017,9 +917,7 @@ local function StopFullbright()
     if origFogStart then Lighting.FogStart = origFogStart end
 end
 
---==================================================--
---  BTOOLS
---==================================================--
+-- BTOOLS
 local function GiveBTools()
     local char = GetChar()
     if not char then return end
@@ -1027,41 +925,38 @@ local function GiveBTools()
     if not backpack then return end
 
     local function makeTool(name, action)
-        local tool = Create("Tool", {
-            Name      = name,
-            Parent    = backpack,
-            RequiresHandle = false,
-        })
+        local tool = Create("Tool", { Name = name, Parent = backpack, RequiresHandle = false })
         tool.Activated:Connect(function()
             local mouse = LocalPlayer:GetMouse()
             local target = mouse.Target
             if target and not target.Anchored then
-                pcall(action, target)
+                pcall(action, target, mouse)
             end
         end)
         return tool
     end
 
     makeTool("Delete", function(p) p:Destroy() end)
-    makeTool("Move", function(p)
-        local mouse = LocalPlayer:GetMouse()
+    makeTool("Move", function(p, mouse)
         local conn
         conn = RunService.RenderStepped:Connect(function()
-            if not tool_Active then return end
-            p.CFrame = CFrame.new(mouse.Hit.Position)
+            if p and p.Parent then
+                p.CFrame = CFrame.new(mouse.Hit.Position)
+            else
+                conn:Disconnect()
+            end
         end)
+        task.delay(10, function() if conn then conn:Disconnect() end end)
     end)
     makeTool("Clone", function(p)
         local clone = p:Clone()
         clone.Parent = Workspace
         clone.CFrame = p.CFrame + Vector3.new(0, 5, 0)
     end)
-    Notify("Eclipse Hub", "BTools выданы! Проверь рюкзак.", 4)
+    Notify("Eclipse Hub", "BTools выданы!", 4)
 end
 
---==================================================--
---  TELEPORT LOCATIONS (Brookhaven)
---==================================================--
+-- TELEPORT
 local TeleportSpots = {
     { name = "Spawn",       pos = Vector3.new(0, 5, 0) },
     { name = "City Center", pos = Vector3.new(-130, 5, -50) },
@@ -1075,31 +970,28 @@ local TeleportSpots = {
 
 local function TeleportTo(pos)
     local root = GetRoot()
-    if root then
-        root.CFrame = CFrame.new(pos)
-    end
+    if root then root.CFrame = CFrame.new(pos) end
 end
+
+Log("Feature modules loaded")
 
 --==================================================--
 --  BUILD TABS
 --==================================================--
+Log("Building tabs...")
 
--- ===== PLAYER TAB =====
-local PlayerTab = UI:AddTab("Player", "")
+-- PLAYER TAB
+local PlayerTab = UI:AddTab("Player")
 
 PlayerTab:AddSection("Movement")
 PlayerTab:AddToggle("Fly (WASD + Space/Shift)", false, function(val)
     FlyConfig.Enabled = val
     if val then StartFly() else StopFly() end
 end)
-PlayerTab:AddSlider("Fly Speed", 10, 300, 50, function(val)
-    FlyConfig.Speed = val
-end)
-
+PlayerTab:AddSlider("Fly Speed", 10, 300, 50, function(val) FlyConfig.Speed = val end)
 PlayerTab:AddToggle("Noclip", false, function(val)
     if val then StartNoclip() else StopNoclip() end
 end)
-
 PlayerTab:AddToggle("Infinite Jump", false, function(val)
     if val then StartInfJump() else StopInfJump() end
 end)
@@ -1121,11 +1013,8 @@ PlayerTab:AddButton("Reset Character", function()
     local char = GetChar()
     if char then char:BreakJoints() end
 end)
-PlayerTab:AddButton("Respawn", function()
-    LocalPlayer:LoadCharacter()
-end)
+PlayerTab:AddButton("Respawn", function() LocalPlayer:LoadCharacter() end)
 
--- Re-apply stats on respawn
 LocalPlayer.CharacterAdded:Connect(function()
     task.wait(0.5)
     local hum = GetHum()
@@ -1135,8 +1024,10 @@ LocalPlayer.CharacterAdded:Connect(function()
     end
 end)
 
--- ===== TELEPORT TAB =====
-local TeleportTab = UI:AddTab("Teleport", "")
+Log("Player tab done")
+
+-- TELEPORT TAB
+local TeleportTab = UI:AddTab("Teleport")
 
 TeleportTab:AddSection("Locations")
 for _, spot in ipairs(TeleportSpots) do
@@ -1148,18 +1039,13 @@ end
 
 TeleportTab:AddSection("Players")
 local playerDropdown
-local playerList = {}
 local function RefreshPlayers()
-    playerList = {}
+    local list = {}
     for _, p in ipairs(Players:GetPlayers()) do
-        if p ~= LocalPlayer then
-            table.insert(playerList, p.Name)
-        end
+        if p ~= LocalPlayer then table.insert(list, p.Name) end
     end
-    if #playerList == 0 then
-        playerList = { "No players" }
-    end
-    if playerDropdown then playerDropdown.Refresh(playerList) end
+    if #list == 0 then list = { "No players" } end
+    if playerDropdown then playerDropdown.Refresh(list) end
 end
 
 playerDropdown = TeleportTab:AddDropdown("Teleport to", {"Loading..."}, function(selected)
@@ -1176,15 +1062,14 @@ end)
 
 TeleportTab:AddButton("Refresh Player List", RefreshPlayers)
 RefreshPlayers()
-
 Players.PlayerAdded:Connect(RefreshPlayers)
 Players.PlayerRemoving:Connect(RefreshPlayers)
 
 TeleportTab:AddSection("Tools")
-TeleportTab:AddButton("Click TP (click to teleport)", function()
+TeleportTab:AddButton("Click TP (Q to stop)", function()
     local mouse = LocalPlayer:GetMouse()
     local conn
-    Notify("Eclipse Hub", "Click TP активен. Нажми Q чтобы остановить.", 4)
+    Notify("Eclipse Hub", "Click TP активен. Q для стоп.", 4)
     conn = UserInputService.InputBegan:Connect(function(input, gpe)
         if gpe then return end
         if input.KeyCode == Enum.KeyCode.Q then
@@ -1201,56 +1086,49 @@ TeleportTab:AddButton("Click TP (click to teleport)", function()
     end)
 end)
 
--- ===== VISUALS TAB =====
-local VisualsTab = UI:AddTab("Visuals", "")
+Log("Teleport tab done")
+
+-- VISUALS TAB
+local VisualsTab = UI:AddTab("Visuals")
 
 VisualsTab:AddSection("World")
 VisualsTab:AddToggle("Fullbright", false, function(val)
     if val then StartFullbright() else StopFullbright() end
 end)
-
-VisualsTab:AddSlider("FOV", 40, 120, 70, function(val)
-    Camera.FieldOfView = val
-end)
+VisualsTab:AddSlider("FOV", 40, 120, 70, function(val) Camera.FieldOfView = val end)
 
 VisualsTab:AddSection("Players")
 VisualsTab:AddToggle("Player ESP", false, function(val)
     if val then StartESP() else StopESP() end
 end)
 
--- ===== FUN TAB =====
-local FunTab = UI:AddTab("Fun", "")
+Log("Visuals tab done")
+
+-- FUN TAB
+local FunTab = UI:AddTab("Fun")
 
 FunTab:AddSection("Tools")
 FunTab:AddButton("Give BTools", GiveBTools)
-
 FunTab:AddButton("Grab All Tools (BH)", function()
-    -- Brookhaven: tools are often in Workspace or given via remotes
     local count = 0
     for _, obj in ipairs(Workspace:GetDescendants()) do
         if obj:IsA("Tool") and obj:FindFirstChild("Handle") then
             local char = GetChar()
-            if char then
-                obj.Parent = char
-                count = count + 1
-            end
+            if char then obj.Parent = char count = count + 1 end
         end
     end
     Notify("Eclipse Hub", "Взято инструментов: " .. count, 3)
 end)
 
 FunTab:AddSection("Trolling")
-FunTab:AddButton("Sit on nearest player", function()
+FunTab:AddButton("Sit on nearest", function()
     local root = GetRoot()
     if not root then return end
     local nearest, nearestDist
     for _, plr in ipairs(Players:GetPlayers()) do
         if plr ~= LocalPlayer and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
             local dist = (root.Position - plr.Character.HumanoidRootPart.Position).Magnitude
-            if not nearestDist or dist < nearestDist then
-                nearest = plr
-                nearestDist = dist
-            end
+            if not nearestDist or dist < nearestDist then nearest = plr nearestDist = dist end
         end
     end
     if nearest and nearest.Character:FindFirstChild("Humanoid") then
@@ -1264,17 +1142,14 @@ FunTab:AddButton("Sit on nearest player", function()
     end
 end)
 
-FunTab:AddButton("Fling nearest player", function()
+FunTab:AddButton("Fling nearest", function()
     local root = GetRoot()
     if not root then return end
     local nearest, nearestDist
     for _, plr in ipairs(Players:GetPlayers()) do
         if plr ~= LocalPlayer and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
             local dist = (root.Position - plr.Character.HumanoidRootPart.Position).Magnitude
-            if not nearestDist or dist < nearestDist then
-                nearest = plr
-                nearestDist = dist
-            end
+            if not nearestDist or dist < nearestDist then nearest = plr nearestDist = dist end
         end
     end
     if nearest and nearest.Character:FindFirstChild("HumanoidRootPart") then
@@ -1305,43 +1180,35 @@ FunTab:AddButton("Spin (toggle)", function()
     task.spawn(function()
         while Eclipse.Flags._spinning do
             local root = GetRoot()
-            if root then
-                root.CFrame = root.CFrame * CFrame.Angles(0, math.rad(5), 0)
-            end
+            if root then root.CFrame = root.CFrame * CFrame.Angles(0, math.rad(5), 0) end
             task.wait()
         end
     end)
 end)
 
--- ===== SETTINGS TAB =====
-local SettingsTab = UI:AddTab("Settings", "")
+Log("Fun tab done")
+
+-- SETTINGS TAB
+local SettingsTab = UI:AddTab("Settings")
 
 SettingsTab:AddSection("UI")
 SettingsTab:AddButton("Toggle UI (RightShift)", function()
-    -- handled below
-    Notify("Eclipse Hub", "Нажми RightShift для скрытия/показа UI", 3)
+    Notify("Eclipse Hub", "Нажми RightShift для UI", 3)
 end)
-
 SettingsTab:AddButton("Destroy UI", function()
     if Blur then Blur:Destroy() end
     ScreenGui:Destroy()
-    for _, c in pairs(Eclipse.Connections) do pcall(function() c:Disconnect() end) end
-    StopFly()
-    StopNoclip()
-    StopInfJump()
-    StopESP()
-    StopFullbright()
+    StopFly() StopNoclip() StopInfJump() StopESP() StopFullbright()
 end)
 
 SettingsTab:AddSection("Info")
-SettingsTab:AddLabel("Eclipse Hub v1.0.0")
+SettingsTab:AddLabel("Eclipse Hub v1.1.0")
 SettingsTab:AddLabel("Game: Brookhaven RP")
 SettingsTab:AddLabel("Executor: Delta X")
-SettingsTab:AddLabel("Made by: Eclipse Team")
 
---==================================================--
---  KEYBINDS
---==================================================--
+Log("Settings tab done")
+
+-- KEYBINDS
 UserInputService.InputBegan:Connect(function(input, gpe)
     if gpe then return end
     if input.KeyCode == Enum.KeyCode.RightShift then
@@ -1349,14 +1216,35 @@ UserInputService.InputBegan:Connect(function(input, gpe)
     end
 end)
 
---==================================================--
---  INIT
---==================================================--
-Notify("Eclipse Hub", "Загружен успешно! Нажми RightShift для UI.", 5)
+-- INIT
+Log("All tabs built! Total: " .. #UI.Tabs)
+Notify("Eclipse Hub", "Загружен! RightShift для UI.", 5)
+Log("Eclipse Hub loaded successfully!")
 
--- Auto-select first tab
-if UI.Tabs[1] then
-    -- already selected
+end) -- end of main pcall
+
+--==================================================--
+--  ERROR HANDLER
+--==================================================--
+if not ok then
+    print("====================================")
+    print("   ECLIPSE HUB - FATAL ERROR")
+    print("   " .. tostring(err))
+    print("====================================")
+    pcall(function()
+        if rconsoleprint then
+            rconsoleprint("\n[EclipseHub] FATAL ERROR: " .. tostring(err) .. "\n")
+        end
+    end)
+    pcall(function()
+        game:GetService("StarterGui"):SetCore("SendNotification", {
+            Title = "Eclipse Hub ERROR",
+            Text  = tostring(err):sub(1, 200),
+            Duration = 15,
+        })
+    end)
+else
+    print("====================================")
+    print("   ECLIPSE HUB - LOADED OK")
+    print("====================================")
 end
-
-return Eclipse
