@@ -31,6 +31,42 @@ local LocalPlayer = Players.LocalPlayer
 local Camera       = Workspace.CurrentCamera
 
 --==================================================--
+--  LOGGING
+--==================================================--
+local LOG_PREFIX = "[EclipseHub] "
+
+local function Log(msg)
+    print(LOG_PREFIX .. tostring(msg))
+    pcall(function()
+        if rconsoleprint then
+            rconsoleprint(LOG_PREFIX .. tostring(msg) .. "\n")
+        end
+    end)
+end
+
+local function LogWarn(msg)
+    warn(LOG_PREFIX .. tostring(msg))
+    pcall(function()
+        if rconsoleprint then
+            rconsoleprint(LOG_PREFIX .. "[WARN] " .. tostring(msg) .. "\n")
+        end
+    end)
+end
+
+local function LogError(msg)
+    warn(LOG_PREFIX .. "[ERROR] " .. tostring(msg))
+    pcall(function()
+        if rconsoleprint then
+            rconsoleprint(LOG_PREFIX .. "[ERROR] " .. tostring(msg) .. "\n")
+        end
+    end)
+end
+
+Log("Starting Eclipse Hub v1.0.0...")
+Log("Executor: " .. (identifyexecutor and identifyexecutor() or "unknown"))
+Log("Game ID: " .. tostring(game.PlaceId))
+
+--==================================================--
 --  STATE
 --==================================================--
 local Eclipse = {
